@@ -1,0 +1,7 @@
+[package]
+name = "werker-http"
+version = "0.1.0"
+authors = ["Waffle <christophersen.jan@gmail.com>"]
+
+[dependencies]
+time = "0.1.0"
