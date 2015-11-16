@@ -13,13 +13,9 @@ struct LogFile {
 }
 
 impl LogFile {
-    pub fn new(path: &str) -> Result<LogFile, String> {
-        let handle = std::fs::File::create(path);
-        if handle.is_err() {
-            // I dont know how to get the actual error message.
-            return Err("error creating file".to_string())
-        }
-        Ok(LogFile{ handle: handle.unwrap() })
+    pub fn new(path: &str) -> Result<LogFile, std::io::Error> {
+        let handle = try!(std::fs::File::create(path));
+        Ok(LogFile{ handle: handle })
     }
 
     pub fn write(&mut self, message: &str) {
