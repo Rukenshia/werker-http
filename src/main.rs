@@ -1,85 +1,82 @@
 extern crate time;
 
 use std::io::prelude::*;
+use std::fs;
+use std::io;
+use std::process;
 
-fn exec(command: &str, args: &[&str]) -> std::process::Output {
-    std::process::Command::new(command).args(args).output().unwrap_or_else(|e| {
-        panic!(format!("failed to execute command {}: {}", command, e))
-    })
+fn exec(command: &str, args: &[&str]) -> process::Output {
+    match process::Command::new(command).args(args).output() {
+        Err(e) => panic!(format!("failed to execute command {}: {}", command, e)),
+        Ok(v) => v,
+    }
 }
 
 struct LogFile {
-    handle: std::fs::File
+    handle: fs::File
 }
 
 impl LogFile {
     pub fn new(path: &str) -> Result<LogFile, std::io::Error> {
-        let handle = try!(std::fs::File::create(path));
+        let handle = try!(fs::File::create(path));
         Ok(LogFile{ handle: handle })
     }
 
     pub fn write(&mut self, message: &str) {
-        self.handle.write_all(&*message.to_string().into_bytes()).or_else(|_| {
+        let msg = message.to_string() + "\n";
+        if let Err(..) = self.handle.write_all(msg.as_bytes()) {
             println!("could not write to log file");
-            Err(())
-        }).ok();
+        }
     }
 }
 
 
 fn main() {
-    let args: Vec<_> = std::env::args().collect();
+    let args = &mut std::env::args();
 
     if args.len() < 7 {
         panic!("invalid args")
     }
 
-    let anime = &*args[1];
-    let url = &*args[3];
-    let filename = &*args[4];
-    let outdir = &*args[5];
-    let intermediate_dir = &*args[6];
+    let anime = &args.nth(1).unwrap();
+    let episode = &args.nth(2).unwrap();
+    let url = &args.nth(3).unwrap();
+    let filename = &args.nth(4).unwrap();
+    let outdir = &args.nth(5).unwrap();
+    let intermediate_dir = &args.nth(6).unwrap();
 
-    std::fs::create_dir("./.werker-logs").or_else(|e| -> Result<(), ()> {
-        if e.raw_os_error().unwrap() == 17 {
-            return Ok(())
+    if let Err(e) = fs::create_dir("./.werker-logs") {
+        match e.kind() {
+            io::ErrorKind::AlreadyExists => {},
+            _ => panic!("could not create werker-logs directory: {}", e),
         }
-        panic!(format!("could not create log directory: {}", e))
-    }).ok();
+    }
 
     let tm = time::now();
+    let tm_formatted = tm.strftime("%Y-%m-%d-%H-%M-%S").unwrap();
+    let log_name = format!(".werker-logs/werker-http-{}-{}_{}", anime, episode, tm_formatted);
+    let intermediate_file = format!("{}/{}", intermediate_dir, filename);
+    let output_file = format!("{}/{}/{}", outdir, anime, filename);
 
-    let file = LogFile::new(&*format!(".werker-logs/werker-http_{}.log", tm.strftime("%Y-%m-%d-%H-%M-%S").unwrap()));
+    let mut log = LogFile::new(&log_name).expect("could not create log file");
 
-    if file.is_err() {
-        panic!("could not create log file");
-    }
-    let mut log = file.unwrap();
     // Create an empty file in the output directory to signalize that we are downloading the file.
-    log.write("creating dummy file\n");
-    std::fs::File::create(format!("{}/{}/{}", outdir, anime, filename))
-        .or_else(|e| -> Result<std::fs::File, _> {
-            log.write(&*format!("could not create dummy file: {}\n", e));
-            Err(())
-        })
-        .ok();
+    log.write("creating dummy file");
+    if let Err(e) = fs::File::create(&output_file) {
+        println!("could not create dummy file: {}", e);
+    }
 
     // Download the actual file
-    log.write("downloading file\n");
-    log.write(&*format!("{}/{}", intermediate_dir, filename));
-    exec("wget", &["-O", &*format!("{}/{}", intermediate_dir, filename), &*url]);
-    log.write("moving output file\n");
+    log.write("downloading file");
+    exec("wget", &["-O", &intermediate_file, &url]);
+    log.write("moving output file");
 
     // Move the downloaded file to the output directory
-    let mv_result = std::fs::rename(format!("{}/{}", intermediate_dir, filename), format!("{}/{}/{}", outdir, anime, filename))
-        .or_else(|e| {
-            log.write(&*format!("could not move file: {}\n", e));
-            Err(())
-        });
-
-    if mv_result.is_ok() {
-        log.write("finished\n");
-    } else {
-        log.write("finished with error(s).\n");
+    match fs::rename(intermediate_file, output_file) {
+        Err(e) => {
+            log.write(&format!("could not move output file: {}", e));
+            log.write("finished with error(s).");
+        },
+        Ok(..) => log.write("finished."),
     }
 }
