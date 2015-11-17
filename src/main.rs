@@ -32,18 +32,18 @@ impl LogFile {
 
 
 fn main() {
-    let args = &mut std::env::args();
+    let args: Vec<_> = std::env::args().collect();
 
     if args.len() < 7 {
         panic!("invalid args")
     }
 
-    let anime = &args.nth(1).unwrap();
-    let episode = &args.nth(2).unwrap();
-    let url = &args.nth(3).unwrap();
-    let filename = &args.nth(4).unwrap();
-    let outdir = &args.nth(5).unwrap();
-    let intermediate_dir = &args.nth(6).unwrap();
+    let anime = &args[1];
+    let episode = &args[2];
+    let url = &args[3];
+    let filename = &args[4];
+    let outdir = &args[5];
+    let intermediate_dir = &args[6];
 
     if let Err(e) = fs::create_dir("./.werker-logs") {
         match e.kind() {
